@@ -158,35 +158,36 @@ async def fetch_available_models(client: httpx.AsyncClient) -> List[str]:
     return [item.get("name") for item in data.get("models", []) if item.get("name")]
 
 
-def pick_fallback_multimodal_model(models: List[str], requested_model: str) -> Optional[str]:
+def pick_fallback_multimodal_models(models: List[str], requested_model: str) -> List[str]:
     if not models:
-        return None
+        return []
 
     if is_likely_multimodal_model(requested_model):
-        return requested_model
+        return [requested_model]
 
     multimodal_models = [name for name in models if is_likely_multimodal_model(name)]
     if not multimodal_models:
-        return None
+        return []
 
     preferred_order = (
-        "llama3.2-vision",
+        "llava",
         "qwen2.5-vl",
         "qwen2-vl",
-        "llava",
+        "llama3.2-vision",
         "minicpm-v",
         "moondream",
     )
+    ordered: List[str] = []
     for preferred in preferred_order:
         for candidate in multimodal_models:
-            if preferred in candidate.lower() and candidate != requested_model:
-                return candidate
+            if preferred in candidate.lower() and candidate != requested_model and candidate not in ordered:
+                ordered.append(candidate)
 
     for candidate in multimodal_models:
-        if candidate != requested_model:
-            return candidate
+        if candidate != requested_model and candidate not in ordered:
+            ordered.append(candidate)
 
-    return None
+    return ordered
 
 
 @app.get("/health")
@@ -372,8 +373,8 @@ async def chat_with_attachments(
                         )
 
                     available_models = await fetch_available_models(client)
-                    fallback_model = pick_fallback_multimodal_model(available_models, model)
-                    if not fallback_model:
+                    fallback_models = pick_fallback_multimodal_models(available_models, model)
+                    if not fallback_models:
                         raise HTTPException(
                             status_code=400,
                             detail={
@@ -384,18 +385,35 @@ async def chat_with_attachments(
                             },
                         )
 
-                    payload["model"] = fallback_model
-                    retry_response = await client.post(f"{OLLAMA_BASE_URL}/api/chat", json=payload)
-                    if not retry_response.is_success:
-                        detail = {
+                    last_error: Optional[Dict[str, Any]] = None
+                    for fallback_model in fallback_models:
+                        payload["model"] = fallback_model
+                        retry_response = await client.post(f"{OLLAMA_BASE_URL}/api/chat", json=payload)
+                        if retry_response.is_success:
+                            data = retry_response.json()
+                            model_used = fallback_model
+                            last_error = None
+                            break
+
+                        retry_text = retry_response.text.lower()
+                        retryable_arch_error = (
+                            retry_response.status_code >= 500
+                            and (
+                                "unknown model architecture" in retry_text
+                                or "error loading model" in retry_text
+                            )
+                        )
+                        last_error = {
                             "error": "Ollama respondió con error",
                             "status_code": retry_response.status_code,
                             "response": retry_response.text,
+                            "model_attempted": fallback_model,
                         }
-                        raise HTTPException(status_code=502, detail=detail)
+                        if not retryable_arch_error:
+                            break
 
-                    data = retry_response.json()
-                    model_used = fallback_model
+                    if last_error is not None:
+                        raise HTTPException(status_code=502, detail=last_error)
                 else:
                     detail = {
                         "error": "Ollama respondió con error",
