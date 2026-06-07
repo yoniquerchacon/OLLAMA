@@ -6,3 +6,7 @@ __pycache__/
 .pytest_cache/
 .mypy_cache/
 .DS_Store
+.vercel
+node_modules/
+vscode-ia-local/node_modules/
+vscode-ia-local/out/
