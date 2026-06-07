@@ -3,7 +3,7 @@
 Este proyecto queda separado en backend y frontend:
 
 - `backend`: API FastAPI que reenvia peticiones a Ollama
-- `front end`: interfaz web para enviar preguntas
+- `front end`: interfaz web tipo mensajeria para enviar preguntas
 
 ## Requisitos
 
@@ -31,7 +31,7 @@ Ajusta:
   - Remoto/Vercel: usa una URL pública de túnel hacia tu máquina
 - `DEFAULT_MODEL`: por ejemplo `llama3:8b`
 - `REQUEST_TIMEOUT`: segundos de espera
-- `API_KEY`: clave secreta requerida para consumir `POST /chat`
+- `API_KEY`: variable reservada para configuraciones internas en Vercel
 
 ## 3) Ejecutar local
 
@@ -42,10 +42,6 @@ uvicorn backend.app.main:app --reload --host 0.0.0.0 --port 8000
 ## 4) Endpoint principal
 
 `POST /chat`
-
-Header requerido:
-
-- `X-API-Key: tu_clave_secreta`
 
 Body de ejemplo:
 
@@ -62,14 +58,15 @@ Body de ejemplo:
 La interfaz esta en `front end/index.html`.
 
 - En Vercel queda en la raiz: `/`
-- Usa el campo `API URL` para apuntar al backend (por defecto usa el mismo dominio)
-- Envia consultas a `POST /chat` con `X-API-Key`
+- El frontend consulta el backend en el mismo dominio
+- El modelo se elige desde un select cargado con los modelos disponibles
+- El chat se usa con Enter para enviar y Shift+Enter para salto de linea
 
 ## 6) Memoria por conversación
 
-La memoria por conversación se guarda en el navegador y se envía al backend por `conversation_id`.
+La memoria por conversación se guarda en el navegador y se envía al backend en cada consulta.
 
-- Cada navegador genera su propio `Conversation ID`
+- Cada navegador genera su propio contexto local
 - Las preguntas nuevas reutilizan el historial anterior de esa conversación
 - El boton `Nueva conversación` crea un contexto limpio
 

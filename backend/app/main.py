@@ -1,27 +1,18 @@
 import os
-from hmac import compare_digest
 from typing import Any, Dict, List, Optional
 
 import httpx
 from dotenv import load_dotenv
-from fastapi import Depends, FastAPI, Header, HTTPException
+from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
 load_dotenv()
 
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://127.0.0.1:11434").rstrip("/")
-DEFAULT_MODEL = os.getenv("DEFAULT_MODEL", "llama3")
+DEFAULT_MODEL = os.getenv("DEFAULT_MODEL", "llama3:8b")
 REQUEST_TIMEOUT = float(os.getenv("REQUEST_TIMEOUT", "120"))
-API_KEY = os.getenv("API_KEY", "")
 
 app = FastAPI(title="Ollama Proxy API", version="1.0.0")
-
-
-def verify_api_key(x_api_key: Optional[str] = Header(default=None, alias="X-API-Key")) -> None:
-    if not API_KEY:
-        raise HTTPException(status_code=500, detail="API_KEY no configurada en el servidor.")
-    if not x_api_key or not compare_digest(x_api_key, API_KEY):
-        raise HTTPException(status_code=401, detail="No autorizado: API Key invalida.")
 
 
 class ChatMessage(BaseModel):
@@ -50,8 +41,34 @@ def health() -> Dict[str, Any]:
     }
 
 
+@app.get("/models")
+async def models() -> Dict[str, Any]:
+    try:
+        async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT) as client:
+            response = await client.get(f"{OLLAMA_BASE_URL}/api/tags")
+            response.raise_for_status()
+            data = response.json()
+    except httpx.HTTPStatusError as exc:
+        detail = {
+            "error": "Ollama respondió con error",
+            "status_code": exc.response.status_code,
+            "response": exc.response.text,
+        }
+        raise HTTPException(status_code=502, detail=detail) from exc
+    except httpx.RequestError as exc:
+        detail = {
+            "error": "No se pudo conectar con Ollama",
+            "hint": "Si desplegas en Vercel, usa una URL pública (túnel) en OLLAMA_BASE_URL.",
+            "base_url": OLLAMA_BASE_URL,
+        }
+        raise HTTPException(status_code=503, detail=detail) from exc
+
+    models_list = [item.get("name") for item in data.get("models", []) if item.get("name")]
+    return {"ok": True, "models": models_list, "raw": data}
+
+
 @app.post("/chat")
-async def chat(req: ChatRequest, _: None = Depends(verify_api_key)) -> Dict[str, Any]:
+async def chat(req: ChatRequest) -> Dict[str, Any]:
     if not req.prompt and not req.messages:
         raise HTTPException(status_code=400, detail="Debes enviar 'prompt' o 'messages'.")
 
