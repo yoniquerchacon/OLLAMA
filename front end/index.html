@@ -26,7 +26,46 @@
       --shadow: 0 18px 38px rgba(145, 108, 132, 0.18);
     }
 
-    body[data-theme="cyberpunk"] {
+    body[data-theme="anime"][data-variant="studio"] {
+      --bg: #f8fbff;
+      --bg-accent-1: rgba(151, 198, 255, 0.34);
+      --bg-accent-2: rgba(180, 255, 243, 0.32);
+      --bg-accent-3: rgba(255, 227, 170, 0.26);
+      --panel: rgba(255, 255, 255, 0.78);
+      --panel-solid: #fafdff;
+      --panel-2: #f2f9ff;
+      --text: #1d2f4f;
+      --muted: #5f7ca3;
+      --brand: #4e9eff;
+      --brand-2: #328af5;
+      --line: rgba(95, 124, 163, 0.25);
+      --user: linear-gradient(140deg, #7cb9ff, #4e9eff 55%, #2b8bf8);
+      --assistant: #edf6ff;
+      --select-glow: rgba(78, 158, 255, 0.24);
+      --shadow: 0 18px 38px rgba(92, 126, 170, 0.2);
+    }
+
+    body[data-theme="anime"][data-variant="summer"] {
+      --bg: #fffceb;
+      --bg-accent-1: rgba(255, 205, 142, 0.34);
+      --bg-accent-2: rgba(166, 238, 191, 0.34);
+      --bg-accent-3: rgba(255, 143, 176, 0.2);
+      --panel: rgba(255, 255, 255, 0.8);
+      --panel-solid: #fffef7;
+      --panel-2: #fff8de;
+      --text: #3b2f22;
+      --muted: #90755a;
+      --brand: #ff8f4f;
+      --brand-2: #ff7d37;
+      --line: rgba(144, 117, 90, 0.24);
+      --user: linear-gradient(140deg, #ffb26b, #ff8f4f 52%, #ff6f3f);
+      --assistant: #fff2d9;
+      --select-glow: rgba(255, 143, 79, 0.24);
+      --shadow: 0 18px 38px rgba(174, 130, 90, 0.2);
+    }
+
+    body[data-theme="cyberpunk"],
+    body[data-theme="cyberpunk"][data-variant="neon"] {
       --bg: #06000f;
       --bg-accent-1: rgba(0, 255, 247, 0.18);
       --bg-accent-2: rgba(255, 39, 125, 0.2);
@@ -45,6 +84,48 @@
       --warn: #ffc857;
       --error: #ff5d8f;
       --shadow: 0 18px 40px rgba(0, 0, 0, 0.45);
+    }
+
+    body[data-theme="cyberpunk"][data-variant="grid"] {
+      --bg: #04060f;
+      --bg-accent-1: rgba(16, 220, 255, 0.14);
+      --bg-accent-2: rgba(255, 35, 155, 0.16);
+      --bg-accent-3: rgba(117, 91, 255, 0.16);
+      --panel: rgba(8, 12, 24, 0.76);
+      --panel-solid: #0d1226;
+      --panel-2: #0a1020;
+      --text: #d4ecff;
+      --muted: #88a9ca;
+      --brand: #00c8ff;
+      --brand-2: #00a6ff;
+      --line: rgba(0, 200, 255, 0.3);
+      --user: linear-gradient(140deg, #fe5ea8, #ff2a8a 56%, #dd0c7a);
+      --assistant: rgba(13, 20, 39, 0.95);
+      --select-glow: rgba(0, 200, 255, 0.24);
+      --warn: #ffd166;
+      --error: #ff6f9f;
+      --shadow: 0 18px 40px rgba(0, 0, 0, 0.52);
+    }
+
+    body[data-theme="cyberpunk"][data-variant="void"] {
+      --bg: #0a0214;
+      --bg-accent-1: rgba(176, 67, 255, 0.2);
+      --bg-accent-2: rgba(26, 255, 236, 0.14);
+      --bg-accent-3: rgba(255, 52, 145, 0.17);
+      --panel: rgba(19, 8, 33, 0.77);
+      --panel-solid: #170a2b;
+      --panel-2: #120825;
+      --text: #f5e6ff;
+      --muted: #b79bcc;
+      --brand: #a55dff;
+      --brand-2: #8f46f6;
+      --line: rgba(165, 93, 255, 0.3);
+      --user: linear-gradient(140deg, #ff4ca7, #f02890 56%, #ce0a7a);
+      --assistant: rgba(31, 14, 50, 0.93);
+      --select-glow: rgba(165, 93, 255, 0.24);
+      --warn: #ffcf66;
+      --error: #ff739e;
+      --shadow: 0 18px 40px rgba(0, 0, 0, 0.5);
     }
 
     * { box-sizing: border-box; }
@@ -245,7 +326,8 @@
       </div>
       <div class="controls">
         <select id="model" aria-label="Modelo"></select>
-        <button id="themeToggleBtn" class="btn" type="button">Modo Cyberpunk Oscuro</button>
+        <button id="themeToggleBtn" class="btn" type="button">Tema: Cyberpunk</button>
+        <button id="themeVariantBtn" class="btn" type="button">Variante: Sakura</button>
         <button id="newConversationBtn" class="btn" type="button">Nueva conversación</button>
       </div>
     </header>
@@ -277,6 +359,7 @@
     const askBtn = document.getElementById("askBtn");
     const newConversationBtn = document.getElementById("newConversationBtn");
     const themeToggleBtn = document.getElementById("themeToggleBtn");
+    const themeVariantBtn = document.getElementById("themeVariantBtn");
     const statusEl = document.getElementById("status");
     const chatLogEl = document.getElementById("chatLog");
     const attachmentsInput = document.getElementById("attachments");
@@ -286,8 +369,22 @@
     const apiBaseUrl = window.location.origin;
     const defaultModel = "llama3:8b";
     const themeKey = "ollama_proxy_theme";
+    const themeVariantKey = "ollama_proxy_theme_variant";
     const conversationKey = "ollama_proxy_conversation_id";
     const historyPrefix = "ollama_proxy_history_";
+
+    const themeVariants = {
+      anime: [
+        { id: "sakura", label: "Sakura" },
+        { id: "studio", label: "Studio" },
+        { id: "summer", label: "Summer" },
+      ],
+      cyberpunk: [
+        { id: "neon", label: "Neon" },
+        { id: "grid", label: "Grid" },
+        { id: "void", label: "Void" },
+      ],
+    };
 
     const escapeHtml = (text) => String(text || "")
       .replace(/&/g, "&amp;")
@@ -334,13 +431,24 @@
       statusEl.className = cssClass ? `status ${cssClass}` : "status";
     };
 
-    const applyTheme = (theme, silent = false) => {
-      const normalizedTheme = theme === "cyberpunk" ? "cyberpunk" : "anime";
+    const normalizeTheme = (theme) => (theme === "cyberpunk" ? "cyberpunk" : "anime");
+
+    const normalizeVariant = (theme, variant) => {
+      const list = themeVariants[theme] || themeVariants.anime;
+      const exists = list.some((item) => item.id === variant);
+      return exists ? variant : list[0].id;
+    };
+
+    const applyTheme = (theme, variant, silent = false) => {
+      const normalizedTheme = normalizeTheme(theme);
+      const normalizedVariant = normalizeVariant(normalizedTheme, variant);
       document.body.setAttribute("data-theme", normalizedTheme);
-      const isCyberpunk = normalizedTheme === "cyberpunk";
-      themeToggleBtn.textContent = isCyberpunk ? "Modo Anime Claro" : "Modo Cyberpunk Oscuro";
+      document.body.setAttribute("data-variant", normalizedVariant);
+      themeToggleBtn.textContent = normalizedTheme === "cyberpunk" ? "Tema: Anime" : "Tema: Cyberpunk";
+      const currentVariant = (themeVariants[normalizedTheme] || []).find((item) => item.id === normalizedVariant);
+      themeVariantBtn.textContent = `Variante: ${currentVariant ? currentVariant.label : normalizedVariant}`;
       if (!silent) {
-        setStatus(isCyberpunk ? "Tema cyberpunk activado." : "Tema anime claro activado.");
+        setStatus(`Tema ${normalizedTheme} (${currentVariant ? currentVariant.label : normalizedVariant}) activado.`);
       }
     };
 
@@ -481,10 +589,24 @@
     });
 
     themeToggleBtn.addEventListener("click", () => {
-      const currentTheme = document.body.getAttribute("data-theme") || "anime";
+      const currentTheme = normalizeTheme(document.body.getAttribute("data-theme") || "anime");
+      const currentVariant = document.body.getAttribute("data-variant") || "sakura";
       const nextTheme = currentTheme === "cyberpunk" ? "anime" : "cyberpunk";
-      applyTheme(nextTheme);
+      const nextVariant = normalizeVariant(nextTheme, currentVariant);
+      applyTheme(nextTheme, nextVariant);
       localStorage.setItem(themeKey, nextTheme);
+      localStorage.setItem(themeVariantKey, nextVariant);
+    });
+
+    themeVariantBtn.addEventListener("click", () => {
+      const currentTheme = normalizeTheme(document.body.getAttribute("data-theme") || "anime");
+      const variants = themeVariants[currentTheme] || themeVariants.anime;
+      const currentVariant = normalizeVariant(currentTheme, document.body.getAttribute("data-variant") || variants[0].id);
+      const currentIndex = variants.findIndex((item) => item.id === currentVariant);
+      const nextVariant = variants[(currentIndex + 1) % variants.length].id;
+      applyTheme(currentTheme, nextVariant);
+      localStorage.setItem(themeKey, currentTheme);
+      localStorage.setItem(themeVariantKey, nextVariant);
     });
 
     askBtn.addEventListener("click", sendMessage);
@@ -497,7 +619,9 @@
 
     (async () => {
       localStorage.setItem(conversationKey, getConversationId());
-      applyTheme(localStorage.getItem(themeKey) || "anime", true);
+      const initialTheme = normalizeTheme(localStorage.getItem(themeKey) || "anime");
+      const initialVariant = normalizeVariant(initialTheme, localStorage.getItem(themeVariantKey) || "sakura");
+      applyTheme(initialTheme, initialVariant, true);
       renderHistory(localStorage.getItem(conversationKey));
       renderSelectedFiles();
       await populateModels();
