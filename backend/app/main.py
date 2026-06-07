@@ -610,6 +610,59 @@ async def chat_with_attachments(
                     model_used,
                 )
 
+        if refusal_match and images_b64 and AUTO_SWITCH_MULTIMODAL:
+            try:
+                async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT) as client:
+                    available_models = await fetch_available_models(client)
+                    fallback_models = pick_fallback_multimodal_models(available_models, model_used)
+                    for fallback_model in fallback_models:
+                        fallback_payload = {
+                            "model": fallback_model,
+                            "stream": False,
+                            "messages": [build_secure_system_message(), *prior_messages, user_message],
+                        }
+                        fallback_response = await client.post(f"{OLLAMA_BASE_URL}/api/chat", json=fallback_payload)
+                        if not fallback_response.is_success:
+                            logger.warning(
+                                "chat_attachments_refusal_fallback_http_error request_id=%s retry_model=%s status=%s response=%s",
+                                request_id,
+                                fallback_model,
+                                fallback_response.status_code,
+                                fallback_response.text,
+                            )
+                            continue
+
+                        fallback_data = fallback_response.json()
+                        fallback_text = str(fallback_data.get("message", {}).get("content", ""))
+                        fallback_refusal = detect_refusal(fallback_text)
+                        if fallback_refusal:
+                            logger.warning(
+                                "chat_attachments_refusal_fallback_still_refused request_id=%s retry_model=%s rule=%s content_preview=%s",
+                                request_id,
+                                fallback_model,
+                                fallback_refusal,
+                                fallback_text[:200],
+                            )
+                            continue
+
+                        logger.info(
+                            "chat_attachments_refusal_recovered_with_fallback request_id=%s from_model=%s to_model=%s",
+                            request_id,
+                            model_used,
+                            fallback_model,
+                        )
+                        data = fallback_data
+                        assistant_content = fallback_text
+                        model_used = fallback_model
+                        refusal_match = None
+                        break
+            except httpx.RequestError:
+                logger.exception(
+                    "chat_attachments_refusal_fallback_connection_error request_id=%s model=%s",
+                    request_id,
+                    model_used,
+                )
+
     logger.info(
         "chat_attachments_success request_id=%s requested_model=%s used_model=%s images=%s documents=%s",
         request_id,
