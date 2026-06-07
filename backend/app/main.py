@@ -2,12 +2,14 @@ import os
 import re
 import base64
 import json
+import uuid
+import logging
 from io import BytesIO
 from typing import Any, Dict, List, Optional
 
 import httpx
 from dotenv import load_dotenv
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile, Request
 from pydantic import BaseModel, Field
 from pypdf import PdfReader
 from docx import Document
@@ -22,6 +24,13 @@ MAX_FILE_SIZE_BYTES = int(os.getenv("MAX_FILE_SIZE_BYTES", str(8 * 1024 * 1024))
 MAX_TOTAL_UPLOAD_BYTES = int(os.getenv("MAX_TOTAL_UPLOAD_BYTES", str(24 * 1024 * 1024)))
 MAX_DOC_CHARS = int(os.getenv("MAX_DOC_CHARS", "12000"))
 AUTO_SWITCH_MULTIMODAL = os.getenv("AUTO_SWITCH_MULTIMODAL", "true").lower() in {"1", "true", "yes", "on"}
+LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
+
+logging.basicConfig(
+    level=getattr(logging, LOG_LEVEL, logging.INFO),
+    format="%(asctime)s %(levelname)s %(name)s %(message)s",
+)
+logger = logging.getLogger("ollama_proxy")
 
 MULTIMODAL_HINTS = (
     "vision",
@@ -61,6 +70,13 @@ PROMPT_INJECTION_PATTERNS = [
     r"<\s*system\s*>",
 ]
 
+REFUSAL_PATTERNS = [
+    r"lo\s+siento",
+    r"no\s+puedo\s+ayudarte",
+    r"i\s+can(?:not|'t)\s+help",
+    r"cannot\s+assist",
+]
+
 app = FastAPI(title="Ollama Proxy API", version="1.0.0")
 
 
@@ -83,6 +99,14 @@ class ChatRequest(BaseModel):
 def detect_prompt_injection(text: str) -> Optional[str]:
     lowered = (text or "").lower()
     for pattern in PROMPT_INJECTION_PATTERNS:
+        if re.search(pattern, lowered):
+            return pattern
+    return None
+
+
+def detect_refusal(text: str) -> Optional[str]:
+    lowered = (text or "").lower()
+    for pattern in REFUSAL_PATTERNS:
         if re.search(pattern, lowered):
             return pattern
     return None
@@ -227,7 +251,18 @@ async def models() -> Dict[str, Any]:
 
 
 @app.post("/chat")
-async def chat(req: ChatRequest) -> Dict[str, Any]:
+async def chat(req: ChatRequest, request: Request) -> Dict[str, Any]:
+    request_id = str(uuid.uuid4())
+    logger.info(
+        "chat_start request_id=%s model=%s conversation_id=%s messages=%s has_prompt=%s user_agent=%s",
+        request_id,
+        req.model,
+        req.conversation_id,
+        len(req.messages or []),
+        bool(req.prompt),
+        request.headers.get("user-agent", "unknown"),
+    )
+
     if not req.prompt and not req.messages:
         raise HTTPException(status_code=400, detail="Debes enviar 'prompt' o 'messages'.")
 
@@ -254,6 +289,13 @@ async def chat(req: ChatRequest) -> Dict[str, Any]:
             response.raise_for_status()
             data = response.json()
     except httpx.HTTPStatusError as exc:
+        logger.error(
+            "chat_ollama_http_error request_id=%s model=%s status=%s response=%s",
+            request_id,
+            req.model,
+            exc.response.status_code,
+            exc.response.text,
+        )
         detail = {
             "error": "Ollama respondió con error",
             "status_code": exc.response.status_code,
@@ -261,12 +303,31 @@ async def chat(req: ChatRequest) -> Dict[str, Any]:
         }
         raise HTTPException(status_code=502, detail=detail) from exc
     except httpx.RequestError as exc:
+        logger.exception(
+            "chat_ollama_connection_error request_id=%s model=%s base_url=%s",
+            request_id,
+            req.model,
+            OLLAMA_BASE_URL,
+        )
         detail = {
             "error": "No se pudo conectar con Ollama",
             "hint": "Si desplegas en Vercel, usa una URL pública (túnel) en OLLAMA_BASE_URL.",
             "base_url": OLLAMA_BASE_URL,
         }
         raise HTTPException(status_code=503, detail=detail) from exc
+
+    assistant_content = str(data.get("message", {}).get("content", ""))
+    refusal_match = detect_refusal(assistant_content)
+    if refusal_match:
+        logger.warning(
+            "chat_refusal_detected request_id=%s model=%s rule=%s content_preview=%s",
+            request_id,
+            req.model,
+            refusal_match,
+            assistant_content[:200],
+        )
+
+    logger.info("chat_success request_id=%s model=%s", request_id, req.model)
 
     return {
         "ok": True,
@@ -278,12 +339,23 @@ async def chat(req: ChatRequest) -> Dict[str, Any]:
 
 @app.post("/chat/attachments")
 async def chat_with_attachments(
+    request: Request,
     prompt: str = Form(...),
     model: str = Form(default=DEFAULT_MODEL),
     conversation_id: Optional[str] = Form(default=None),
     messages_json: Optional[str] = Form(default=None),
     files: List[UploadFile] = File(default=[]),
 ) -> Dict[str, Any]:
+    request_id = str(uuid.uuid4())
+    logger.info(
+        "chat_attachments_start request_id=%s model=%s conversation_id=%s files=%s user_agent=%s",
+        request_id,
+        model,
+        conversation_id,
+        len(files),
+        request.headers.get("user-agent", "unknown"),
+    )
+
     ensure_prompt_safe(prompt, "prompt")
 
     if len(files) > MAX_ATTACHMENTS:
@@ -362,6 +434,12 @@ async def chat_with_attachments(
                 )
 
                 if is_multimodal_error:
+                    logger.warning(
+                        "chat_attachments_multimodal_error request_id=%s requested_model=%s response=%s",
+                        request_id,
+                        model,
+                        response_text,
+                    )
                     if not AUTO_SWITCH_MULTIMODAL:
                         raise HTTPException(
                             status_code=400,
@@ -375,6 +453,12 @@ async def chat_with_attachments(
                     available_models = await fetch_available_models(client)
                     fallback_models = pick_fallback_multimodal_models(available_models, model)
                     if not fallback_models:
+                        logger.warning(
+                            "chat_attachments_no_multimodal_models request_id=%s requested_model=%s available=%s",
+                            request_id,
+                            model,
+                            available_models,
+                        )
                         raise HTTPException(
                             status_code=400,
                             detail={
@@ -387,6 +471,12 @@ async def chat_with_attachments(
 
                     last_error: Optional[Dict[str, Any]] = None
                     for fallback_model in fallback_models:
+                        logger.info(
+                            "chat_attachments_retry_model request_id=%s requested_model=%s retry_model=%s",
+                            request_id,
+                            model,
+                            fallback_model,
+                        )
                         payload["model"] = fallback_model
                         retry_response = await client.post(f"{OLLAMA_BASE_URL}/api/chat", json=payload)
                         if retry_response.is_success:
@@ -413,8 +503,20 @@ async def chat_with_attachments(
                             break
 
                     if last_error is not None:
+                        logger.error(
+                            "chat_attachments_all_multimodal_retries_failed request_id=%s error=%s",
+                            request_id,
+                            last_error,
+                        )
                         raise HTTPException(status_code=502, detail=last_error)
                 else:
+                    logger.error(
+                        "chat_attachments_ollama_http_error request_id=%s model=%s status=%s response=%s",
+                        request_id,
+                        model,
+                        response.status_code,
+                        response_text,
+                    )
                     detail = {
                         "error": "Ollama respondió con error",
                         "status_code": response.status_code,
@@ -422,12 +524,39 @@ async def chat_with_attachments(
                     }
                     raise HTTPException(status_code=502, detail=detail)
     except httpx.RequestError as exc:
+        logger.exception(
+            "chat_attachments_connection_error request_id=%s model=%s base_url=%s",
+            request_id,
+            model,
+            OLLAMA_BASE_URL,
+        )
         detail = {
             "error": "No se pudo conectar con Ollama",
             "hint": "Si desplegas en Vercel, usa una URL pública (túnel) en OLLAMA_BASE_URL.",
             "base_url": OLLAMA_BASE_URL,
         }
         raise HTTPException(status_code=503, detail=detail) from exc
+
+    assistant_content = str(data.get("message", {}).get("content", ""))
+    refusal_match = detect_refusal(assistant_content)
+    if refusal_match:
+        logger.warning(
+            "chat_attachments_refusal_detected request_id=%s model=%s requested_model=%s rule=%s content_preview=%s",
+            request_id,
+            model_used,
+            model,
+            refusal_match,
+            assistant_content[:200],
+        )
+
+    logger.info(
+        "chat_attachments_success request_id=%s requested_model=%s used_model=%s images=%s documents=%s",
+        request_id,
+        model,
+        model_used,
+        len(images_b64),
+        len(docs_context),
+    )
 
     return {
         "ok": True,

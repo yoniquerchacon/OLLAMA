@@ -188,7 +188,7 @@
 
     <section class="composer-wrap">
       <div class="attach-row">
-        <input id="attachments" class="attach-input" type="file" multiple accept="image/png,image/jpeg,image/webp,text/plain,text/markdown,application/json,text/csv,application/pdf,.docx" />
+        <input id="attachments" class="attach-input" type="file" multiple accept="image/*,.png,.jpg,.jpeg,.webp,.txt,.md,.json,.csv,.pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" />
       </div>
       <div id="fileList" class="file-list"></div>
       <div class="composer">
@@ -388,6 +388,11 @@
     attachmentsInput.addEventListener("change", () => {
       selectedFiles = Array.from(attachmentsInput.files || []);
       renderSelectedFiles();
+      if (!selectedFiles.length) {
+        setStatus("No se adjunto ningun archivo. En Firefox/Linux, prueba con PNG/JPG/PDF o arrastra el archivo.", "warn");
+      } else {
+        setStatus(`Adjuntos listos: ${selectedFiles.length}.`);
+      }
     });
     askBtn.addEventListener("click", sendMessage);
     promptInput.addEventListener("keydown", (event) => {
