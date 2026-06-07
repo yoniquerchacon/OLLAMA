@@ -144,6 +144,53 @@
       font-size: 0.82rem;
       color: var(--muted);
     }
+    .chat-log {
+      display: grid;
+      gap: 10px;
+      padding: 14px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: rgba(255, 255, 255, 0.72);
+      min-height: 180px;
+      max-height: 360px;
+      overflow-y: auto;
+    }
+    .chat-empty {
+      color: var(--muted);
+      font-size: 0.92rem;
+    }
+    .message {
+      display: grid;
+      gap: 4px;
+      max-width: 90%;
+      padding: 10px 12px;
+      border-radius: 14px;
+      border: 1px solid var(--line);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.04);
+    }
+    .message.user {
+      justify-self: end;
+      background: #0f766e;
+      color: #fff;
+      border-color: #0f766e;
+      border-bottom-right-radius: 6px;
+    }
+    .message.assistant {
+      justify-self: start;
+      background: #fff;
+      border-bottom-left-radius: 6px;
+    }
+    .message-meta {
+      font-size: 0.72rem;
+      opacity: 0.72;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+    .message-text {
+      white-space: pre-wrap;
+      word-break: break-word;
+      line-height: 1.45;
+    }
   </style>
 </head>
 <body>
@@ -188,6 +235,11 @@
         <textarea id="prompt" placeholder="Ejemplo: Explica en 4 lineas que es fine-tuning."></textarea>
       </div>
 
+      <div>
+        <label>Historial del chat</label>
+        <div id="chatLog" class="chat-log" aria-live="polite"></div>
+      </div>
+
       <div class="actions">
         <button id="askBtn" class="btn">Preguntar</button>
         <span id="status" class="status">Listo para consultar.</span>
@@ -212,6 +264,7 @@
     const newConversationBtn = document.getElementById("newConversationBtn");
     const statusEl = document.getElementById("status");
     const answerEl = document.getElementById("answer");
+    const chatLogEl = document.getElementById("chatLog");
 
     const defaultApiUrl = window.location.origin;
     const createConversationId = () => (window.crypto?.randomUUID ? window.crypto.randomUUID() : `conv-${Date.now()}-${Math.random().toString(16).slice(2)}`);
@@ -220,6 +273,7 @@
     modelInput.value = localStorage.getItem("ollama_proxy_model") || "";
     conversationIdInput.value = localStorage.getItem("ollama_proxy_conversation_id") || createConversationId();
     localStorage.setItem("ollama_proxy_conversation_id", conversationIdInput.value);
+    renderHistory(conversationIdInput.value);
 
     const getHistoryKey = (conversationId) => `ollama_proxy_history_${conversationId}`;
     const loadHistory = (conversationId) => {
@@ -237,6 +291,34 @@
       history.push(message);
       saveHistory(conversationId, history);
       return history;
+    };
+
+    const escapeHtml = (text) => String(text || "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+
+    const renderHistory = (conversationId) => {
+      const history = loadHistory(conversationId);
+
+      if (!history.length) {
+        chatLogEl.innerHTML = '<div class="chat-empty">Todavia no hay mensajes en esta conversación.</div>';
+        return;
+      }
+
+      chatLogEl.innerHTML = history.map((message) => {
+        const safeRole = message.role === "assistant" ? "assistant" : "user";
+        const label = safeRole === "assistant" ? "IA" : "Tú";
+        return `
+          <div class="message ${safeRole}">
+            <div class="message-meta">${label}</div>
+            <div class="message-text">${escapeHtml(message.content)}</div>
+          </div>
+        `;
+      }).join("");
+
+      chatLogEl.scrollTop = chatLogEl.scrollHeight;
     };
 
     function setStatus(text, cssClass = "") {
@@ -319,6 +401,7 @@
         if (assistantText) {
           appendToHistory(conversationId, { role: "assistant", content: assistantText });
         }
+        renderHistory(conversationId);
         answerEl.textContent = getMessageFromApi(data);
         setStatus(`Respuesta recibida. Conversación: ${data.conversation_id || conversationId}`);
       } catch (error) {
@@ -338,6 +421,7 @@
         localStorage.removeItem(getHistoryKey(previousConversationId));
       }
       promptInput.value = "";
+      renderHistory(newConversationId);
       answerEl.textContent = "Conversación reiniciada. Puedes hacer una nueva pregunta.";
       setStatus("Nueva conversación creada.");
     });
