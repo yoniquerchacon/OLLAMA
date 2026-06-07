@@ -54,6 +54,16 @@ Body de ejemplo:
 }
 ```
 
+## 5) Interfaz web
+
+La API incluye una interfaz para preguntar desde navegador:
+
+- URL: `/ui`
+- Ejemplo local: `http://127.0.0.1:8000/ui`
+- Ejemplo Vercel: `https://ollama-proxy-api.vercel.app/ui`
+
+En la interfaz pegas tu `API Key`, escribes el modelo (opcional) y la pregunta.
+
 ## Nota importante sobre Vercel
 
 Una función en Vercel no puede conectarse directo a `127.0.0.1` de tu PC. Necesitas exponer Ollama con una URL pública (por ejemplo, Cloudflare Tunnel, Tailscale Funnel o Ngrok) y usar esa URL en `OLLAMA_BASE_URL`.
