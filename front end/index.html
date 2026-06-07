@@ -207,6 +207,7 @@
     const chatLogEl = document.getElementById("chatLog");
     const attachmentsInput = document.getElementById("attachments");
     const fileListEl = document.getElementById("fileList");
+    let selectedFiles = [];
 
     const apiBaseUrl = window.location.origin;
     const defaultModel = "llama3:8b";
@@ -259,12 +260,11 @@
     };
 
     const renderSelectedFiles = () => {
-      const files = Array.from(attachmentsInput.files || []);
-      if (!files.length) {
-        fileListEl.innerHTML = "";
+      if (!selectedFiles.length) {
+        fileListEl.innerHTML = '<span class="file-pill">Sin archivos adjuntos</span>';
         return;
       }
-      fileListEl.innerHTML = files.map((file) => `<span class="file-pill">${escapeHtml(file.name)}</span>`).join("");
+      fileListEl.innerHTML = selectedFiles.map((file) => `<span class="file-pill">${escapeHtml(file.name)}</span>`).join("");
     };
 
     const populateModels = async () => {
@@ -319,7 +319,7 @@
       const conversationId = getConversationId();
       const prompt = promptInput.value.trim();
       const model = modelSelect.value || defaultModel;
-      const files = Array.from(attachmentsInput.files || []);
+      const files = [...selectedFiles];
 
       if (!prompt) {
         setStatus("Escribe un mensaje antes de enviar.", "warn");
@@ -355,20 +355,21 @@
         history.push({ role: "assistant", content: assistantText });
         saveHistory(conversationId, history);
         renderHistory(conversationId);
+        selectedFiles = [];
+        attachmentsInput.value = "";
+        renderSelectedFiles();
         setStatus("Respuesta recibida.");
       } catch (error) {
         const history = loadHistory(conversationId).filter((m) => !(m.role === "assistant" && m.content === "Escribiendo..."));
         history.push({ role: "assistant", content: `Error: ${String(error.message || error)}` });
         saveHistory(conversationId, history);
         renderHistory(conversationId);
-        setStatus("No se pudo consultar la API.", "error");
+        setStatus("No se pudo consultar la API. Mantuve tus archivos para reintentar.", "error");
       } finally {
         askBtn.disabled = false;
         promptInput.disabled = false;
         attachmentsInput.disabled = false;
         promptInput.value = "";
-        attachmentsInput.value = "";
-        renderSelectedFiles();
         promptInput.focus();
       }
     };
@@ -378,12 +379,16 @@
       localStorage.setItem(conversationKey, conversationId);
       renderHistory(conversationId);
       promptInput.value = "";
+      selectedFiles = [];
       attachmentsInput.value = "";
       renderSelectedFiles();
       setStatus("Nueva conversación creada.");
     });
 
-    attachmentsInput.addEventListener("change", renderSelectedFiles);
+    attachmentsInput.addEventListener("change", () => {
+      selectedFiles = Array.from(attachmentsInput.files || []);
+      renderSelectedFiles();
+    });
     askBtn.addEventListener("click", sendMessage);
     promptInput.addEventListener("keydown", (event) => {
       if (event.key === "Enter" && !event.shiftKey) {
@@ -395,6 +400,7 @@
     (async () => {
       localStorage.setItem(conversationKey, getConversationId());
       renderHistory(localStorage.getItem(conversationKey));
+      renderSelectedFiles();
       await populateModels();
     })();
   </script>

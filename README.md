@@ -32,6 +32,7 @@ Ajusta:
 - `DEFAULT_MODEL`: por ejemplo `llama3:8b`
 - `REQUEST_TIMEOUT`: segundos de espera
 - `API_KEY`: variable reservada para configuraciones internas en Vercel
+- `AUTO_SWITCH_MULTIMODAL`: si esta en `true`, cuando adjuntas imagenes y el modelo no es multimodal, el backend intenta cambiar automaticamente a uno compatible disponible en Ollama
 
 ## 3) Ejecutar local
 
@@ -69,6 +70,11 @@ Soporta archivos:
 
 - Imagenes: png, jpg/jpeg, webp
 - Documentos: txt, md, json, csv, pdf, docx
+
+Nota para imagenes:
+
+- Si eliges un modelo de solo texto (por ejemplo `llama3:8b`) y adjuntas imagenes, Ollama responde error 400.
+- Con `AUTO_SWITCH_MULTIMODAL=true`, el backend reintenta con un modelo multimodal instalado (por ejemplo `llama3.2-vision` o `llava`).
 
 Limites base:
 
