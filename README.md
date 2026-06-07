@@ -67,7 +67,7 @@ La interfaz esta en `front end/index.html`.
 
 ## 6) Memoria por conversación
 
-El backend ahora guarda contexto por `conversation_id`.
+La memoria por conversación se guarda en el navegador y se envía al backend por `conversation_id`.
 
 - Cada navegador genera su propio `Conversation ID`
 - Las preguntas nuevas reutilizan el historial anterior de esa conversación
@@ -75,9 +75,9 @@ El backend ahora guarda contexto por `conversation_id`.
 
 Importante:
 
-- En local, la memoria se guarda en SQLite dentro de `backend/data/`
-- En Vercel, si quieres memoria persistente de verdad entre reinicios y despliegues, necesitas un almacenamiento externo como Vercel KV, Postgres, Redis o Supabase
-- La versión actual deja la base lista para eso, pero no usa un servicio externo todavia
+- Esto funciona bien en Vercel porque no depende del disco del servidor
+- Si quieres memoria compartida entre dispositivos o usuarios logueados, entonces sí conviene añadir una base de datos externa como Vercel KV, Postgres, Redis o Supabase
+- La implementación actual separa cada conversación por navegador, que es la forma más simple y estable sin infraestructura adicional
 
 ## Nota importante sobre Vercel
 

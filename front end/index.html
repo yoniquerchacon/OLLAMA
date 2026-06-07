@@ -221,6 +221,24 @@
     conversationIdInput.value = localStorage.getItem("ollama_proxy_conversation_id") || createConversationId();
     localStorage.setItem("ollama_proxy_conversation_id", conversationIdInput.value);
 
+    const getHistoryKey = (conversationId) => `ollama_proxy_history_${conversationId}`;
+    const loadHistory = (conversationId) => {
+      try {
+        return JSON.parse(localStorage.getItem(getHistoryKey(conversationId)) || "[]");
+      } catch {
+        return [];
+      }
+    };
+    const saveHistory = (conversationId, history) => {
+      localStorage.setItem(getHistoryKey(conversationId), JSON.stringify(history));
+    };
+    const appendToHistory = (conversationId, message) => {
+      const history = loadHistory(conversationId);
+      history.push(message);
+      saveHistory(conversationId, history);
+      return history;
+    };
+
     function setStatus(text, cssClass = "") {
       statusEl.textContent = text;
       statusEl.className = cssClass ? `status ${cssClass}` : "status";
@@ -272,10 +290,10 @@
       answerEl.textContent = "Esperando respuesta...";
 
       try {
+        const history = loadHistory(conversationId);
         const body = {
-          prompt,
+          messages: [...history, { role: "user", content: prompt }],
           conversation_id: conversationId,
-          remember: true,
           stream: false,
         };
         if (model) {
@@ -296,6 +314,11 @@
           throw new Error(JSON.stringify(data));
         }
 
+        appendToHistory(conversationId, { role: "user", content: prompt });
+        const assistantText = data?.data?.message?.content || "";
+        if (assistantText) {
+          appendToHistory(conversationId, { role: "assistant", content: assistantText });
+        }
         answerEl.textContent = getMessageFromApi(data);
         setStatus(`Respuesta recibida. Conversación: ${data.conversation_id || conversationId}`);
       } catch (error) {
@@ -307,9 +330,13 @@
     });
 
     newConversationBtn.addEventListener("click", async () => {
+      const previousConversationId = conversationIdInput.value.trim();
       const newConversationId = createConversationId();
       conversationIdInput.value = newConversationId;
       localStorage.setItem("ollama_proxy_conversation_id", newConversationId);
+      if (previousConversationId) {
+        localStorage.removeItem(getHistoryKey(previousConversationId));
+      }
       promptInput.value = "";
       answerEl.textContent = "Conversación reiniciada. Puedes hacer una nueva pregunta.";
       setStatus("Nueva conversación creada.");
