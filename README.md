@@ -1,6 +1,9 @@
 # Ollama Proxy API (Vercel + Python)
 
-Este proyecto crea una API en FastAPI para reenviar peticiones a tu instancia local de Ollama.
+Este proyecto queda separado en backend y frontend:
+
+- `backend`: API FastAPI que reenvia peticiones a Ollama
+- `front end`: interfaz web para enviar preguntas
 
 ## Requisitos
 
@@ -33,7 +36,7 @@ Ajusta:
 ## 3) Ejecutar local
 
 ```bash
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+uvicorn backend.app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
 ## 4) Endpoint principal
@@ -56,13 +59,11 @@ Body de ejemplo:
 
 ## 5) Interfaz web
 
-La API incluye una interfaz para preguntar desde navegador:
+La interfaz esta en `front end/index.html`.
 
-- URL: `/ui`
-- Ejemplo local: `http://127.0.0.1:8000/ui`
-- Ejemplo Vercel: `https://ollama-proxy-api.vercel.app/ui`
-
-En la interfaz pegas tu `API Key`, escribes el modelo (opcional) y la pregunta.
+- En Vercel queda en la raiz: `/`
+- Usa el campo `API URL` para apuntar al backend (por defecto usa el mismo dominio)
+- Envia consultas a `POST /chat` con `X-API-Key`
 
 ## Nota importante sobre Vercel
 
