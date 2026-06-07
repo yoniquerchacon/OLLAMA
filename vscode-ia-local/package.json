@@ -10,15 +10,29 @@
   "categories": [
     "Other"
   ],
-  "activationEvents": [
-    "onCommand:iaLocal.openChat"
-  ],
   "main": "./out/extension.js",
   "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "iaLocalSidebar",
+          "title": "IA Local",
+          "icon": "media/ia-local.svg"
+        }
+      ]
+    },
+    "views": {
+      "iaLocalSidebar": [
+        {
+          "id": "iaLocal.chatView",
+          "name": "Chat"
+        }
+      ]
+    },
     "commands": [
       {
         "command": "iaLocal.openChat",
-        "title": "IA Local: Abrir Chat"
+        "title": "IA Local: Enfocar Chat"
       }
     ],
     "configuration": {

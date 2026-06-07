@@ -1,62 +1,64 @@
 import * as vscode from "vscode";
 
 export function activate(context: vscode.ExtensionContext): void {
-  const disposable = vscode.commands.registerCommand("iaLocal.openChat", () => {
-    IAChatPanel.createOrShow(context.extensionUri);
+  const provider = new IAChatSidebarProvider(context.extensionUri);
+
+  const viewRegistration = vscode.window.registerWebviewViewProvider("iaLocal.chatView", provider, {
+    webviewOptions: { retainContextWhenHidden: true },
   });
 
-  context.subscriptions.push(disposable);
+  const focusCommand = vscode.commands.registerCommand("iaLocal.openChat", async () => {
+    await vscode.commands.executeCommand("iaLocal.chatView.focus");
+  });
+
+  context.subscriptions.push(provider, viewRegistration, focusCommand);
 }
 
 export function deactivate(): void {
   // No cleanup required.
 }
 
-class IAChatPanel {
-  private static currentPanel: IAChatPanel | undefined;
-  private readonly panel: vscode.WebviewPanel;
+type IncomingAttachment = {
+  name: string;
+  type: string;
+  base64: string;
+};
+
+class IAChatSidebarProvider implements vscode.WebviewViewProvider, vscode.Disposable {
+  private view: vscode.WebviewView | undefined;
   private readonly extensionUri: vscode.Uri;
   private readonly disposables: vscode.Disposable[] = [];
+  private readonly conversationId: string = crypto.randomUUID();
 
-  static createOrShow(extensionUri: vscode.Uri): void {
-    const column = vscode.window.activeTextEditor?.viewColumn;
-
-    if (IAChatPanel.currentPanel) {
-      IAChatPanel.currentPanel.panel.reveal(column);
-      return;
-    }
-
-    const panel = vscode.window.createWebviewPanel(
-      "iaLocalChat",
-      "IA Local Chat",
-      column ?? vscode.ViewColumn.One,
-      {
-        enableScripts: true,
-      },
-    );
-
-    IAChatPanel.currentPanel = new IAChatPanel(panel, extensionUri);
+  constructor(extensionUri: vscode.Uri) {
+    this.extensionUri = extensionUri;
   }
 
-  private constructor(panel: vscode.WebviewPanel, extensionUri: vscode.Uri) {
-    this.panel = panel;
-    this.extensionUri = extensionUri;
+  resolveWebviewView(webviewView: vscode.WebviewView): void {
+    this.view = webviewView;
+    this.view.webview.options = {
+      enableScripts: true,
+      localResourceRoots: [vscode.Uri.joinPath(this.extensionUri, "media")],
+    };
 
-    this.panel.onDidDispose(() => this.dispose(), null, this.disposables);
-    this.panel.webview.onDidReceiveMessage(
-      async (message: { command: string; prompt?: string; model?: string }) => {
+    this.view.webview.html = this.getHtml();
+
+    this.view.webview.onDidReceiveMessage(
+      async (message: { command: string; prompt?: string; model?: string; attachments?: IncomingAttachment[] }) => {
         if (message.command === "ask") {
-          await this.handleAsk(message.prompt ?? "", message.model ?? "");
+          await this.handleAsk(message.prompt ?? "", message.model ?? "", message.attachments ?? []);
         }
       },
       null,
       this.disposables,
     );
 
-    this.panel.webview.html = this.getHtml();
+    this.view.onDidDispose(() => {
+      this.view = undefined;
+    });
   }
 
-  private async handleAsk(prompt: string, model: string): Promise<void> {
+  private async handleAsk(prompt: string, model: string, attachments: IncomingAttachment[]): Promise<void> {
     const trimmed = prompt.trim();
     if (!trimmed) {
       this.postToWebview({ type: "error", error: "Escribe un prompt antes de enviar." });
@@ -69,17 +71,40 @@ class IAChatPanel {
     const finalModel = model.trim() || defaultModel;
 
     try {
-      const response = await fetch(`${apiBaseUrl}/chat`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model: finalModel,
-          stream: false,
-          messages: [{ role: "user", content: trimmed }],
-        }),
-      });
+      let response: Response;
+
+      if (attachments.length) {
+        const form = new FormData();
+        form.append("prompt", trimmed);
+        form.append("model", finalModel);
+        form.append("conversation_id", this.conversationId);
+        form.append("messages_json", "[]");
+
+        for (const file of attachments) {
+          const mimeType = file.type || "application/octet-stream";
+          const fileName = file.name || "adjunto.bin";
+          const bytes = Buffer.from(file.base64, "base64");
+          const blob = new Blob([bytes], { type: mimeType });
+          form.append("files", blob, fileName);
+        }
+
+        response = await fetch(`${apiBaseUrl}/chat/attachments`, {
+          method: "POST",
+          body: form,
+        });
+      } else {
+        response = await fetch(`${apiBaseUrl}/chat`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            model: finalModel,
+            stream: false,
+            messages: [{ role: "user", content: trimmed }],
+          }),
+        });
+      }
 
       const data = await response.json();
       if (!response.ok) {
@@ -97,7 +122,7 @@ class IAChatPanel {
   }
 
   private postToWebview(payload: unknown): void {
-    this.panel.webview.postMessage(payload);
+    this.view?.webview.postMessage(payload);
   }
 
   private getHtml(): string {
@@ -130,7 +155,7 @@ class IAChatPanel {
       padding: 12px;
       border-bottom: 1px solid var(--line);
       display: grid;
-      grid-template-columns: 1fr auto;
+      grid-template-columns: 1fr;
       gap: 8px;
       background: #0e162a;
     }
@@ -185,12 +210,32 @@ class IAChatPanel {
       font-size: 12px;
       padding: 0 12px 10px;
     }
+    .attach-row {
+      display: grid;
+      gap: 6px;
+    }
+    .attach-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+    .pill {
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 2px 8px;
+      background: #0f1830;
+    }
   </style>
 </head>
 <body>
   <div class="bar">
     <input id="model" placeholder="Modelo (ej: llama3:8b)" />
-    <button id="send">Enviar</button>
+    <div class="attach-row">
+      <input id="attachments" type="file" accept="image/*" multiple />
+      <div id="attachList" class="attach-list"><span class="pill">Sin imagenes adjuntas</span></div>
+    </div>
   </div>
   <div id="chat" class="chat">
     <div class="bubble">IA Local lista. Escribe tu prompt abajo.</div>
@@ -208,7 +253,10 @@ class IAChatPanel {
     const chat = document.getElementById("chat");
     const prompt = document.getElementById("prompt");
     const model = document.getElementById("model");
+    const attachmentsInput = document.getElementById("attachments");
+    const attachList = document.getElementById("attachList");
     const status = document.getElementById("status");
+    let selectedFiles = [];
 
     const appendBubble = (text, cls = "") => {
       const div = document.createElement("div");
@@ -218,7 +266,29 @@ class IAChatPanel {
       chat.scrollTop = chat.scrollHeight;
     };
 
-    const send = () => {
+    const renderAttachments = () => {
+      if (!selectedFiles.length) {
+        attachList.innerHTML = '<span class="pill">Sin imagenes adjuntas</span>';
+        return;
+      }
+      attachList.innerHTML = selectedFiles.map((f) => '<span class="pill">' + f.name + '</span>').join("");
+    };
+
+    const filesToPayload = async () => {
+      const jobs = selectedFiles.map((file) => new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          const result = String(reader.result || "");
+          const base64 = result.includes(",") ? result.split(",")[1] : "";
+          resolve({ name: file.name, type: file.type || "application/octet-stream", base64 });
+        };
+        reader.onerror = () => reject(new Error("No se pudo leer el archivo: " + file.name));
+        reader.readAsDataURL(file);
+      }));
+      return Promise.all(jobs);
+    };
+
+    const send = async () => {
       const value = (prompt.value || "").trim();
       if (!value) {
         status.textContent = "Escribe un prompt antes de enviar.";
@@ -226,12 +296,25 @@ class IAChatPanel {
       }
       appendBubble(value, "user");
       status.textContent = "Consultando IA...";
-      vscode.postMessage({ command: "ask", prompt: value, model: model.value || "" });
+      try {
+        const attachments = await filesToPayload();
+        vscode.postMessage({ command: "ask", prompt: value, model: model.value || "", attachments });
+        selectedFiles = [];
+        attachmentsInput.value = "";
+        renderAttachments();
+      } catch (error) {
+        appendBubble("Error: " + ((error && error.message) || error), "error");
+        status.textContent = "Fallo leyendo imagenes adjuntas.";
+      }
       prompt.value = "";
       prompt.focus();
     };
 
-    document.getElementById("send").addEventListener("click", send);
+    attachmentsInput.addEventListener("change", () => {
+      selectedFiles = Array.from(attachmentsInput.files || []);
+      renderAttachments();
+    });
+
     document.getElementById("send2").addEventListener("click", send);
     prompt.addEventListener("keydown", (event) => {
       if (event.key === "Enter" && !event.shiftKey) {
@@ -251,15 +334,15 @@ class IAChatPanel {
         status.textContent = "Hubo un error al consultar la IA.";
       }
     });
+
+    renderAttachments();
   </script>
 </body>
 </html>`;
   }
 
   public dispose(): void {
-    IAChatPanel.currentPanel = undefined;
-
-    this.panel.dispose();
+    this.view = undefined;
 
     while (this.disposables.length) {
       const disposable = this.disposables.pop();
