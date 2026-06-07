@@ -65,6 +65,20 @@ La interfaz esta en `front end/index.html`.
 - Usa el campo `API URL` para apuntar al backend (por defecto usa el mismo dominio)
 - Envia consultas a `POST /chat` con `X-API-Key`
 
+## 6) Memoria por conversación
+
+El backend ahora guarda contexto por `conversation_id`.
+
+- Cada navegador genera su propio `Conversation ID`
+- Las preguntas nuevas reutilizan el historial anterior de esa conversación
+- El boton `Nueva conversación` crea un contexto limpio
+
+Importante:
+
+- En local, la memoria se guarda en SQLite dentro de `backend/data/`
+- En Vercel, si quieres memoria persistente de verdad entre reinicios y despliegues, necesitas un almacenamiento externo como Vercel KV, Postgres, Redis o Supabase
+- La versión actual deja la base lista para eso, pero no usa un servicio externo todavia
+
 ## Nota importante sobre Vercel
 
 Una función en Vercel no puede conectarse directo a `127.0.0.1` de tu PC. Necesitas exponer Ollama con una URL pública (por ejemplo, Cloudflare Tunnel, Tailscale Funnel o Ngrok) y usar esa URL en `OLLAMA_BASE_URL`.

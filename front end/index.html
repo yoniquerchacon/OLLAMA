@@ -94,6 +94,14 @@
       gap: 10px;
       flex-wrap: wrap;
     }
+    .actions .secondary {
+      border: 1px solid var(--line);
+      background: transparent;
+      color: var(--text);
+    }
+    .actions .secondary:hover {
+      background: rgba(15, 118, 110, 0.08);
+    }
     .btn {
       border: 0;
       border-radius: 10px;
@@ -162,6 +170,19 @@
         <input id="apiKey" type="password" placeholder="Pega tu API key" autocomplete="off" />
       </div>
 
+      <div class="row cols-2">
+        <div>
+          <label for="conversationId">Conversation ID</label>
+          <input id="conversationId" type="text" placeholder="Se genera automaticamente" />
+        </div>
+        <div>
+          <label>&nbsp;</label>
+          <div class="actions">
+            <button id="newConversationBtn" class="btn secondary" type="button">Nueva conversación</button>
+          </div>
+        </div>
+      </div>
+
       <div>
         <label for="prompt">Pregunta</label>
         <textarea id="prompt" placeholder="Ejemplo: Explica en 4 lineas que es fine-tuning."></textarea>
@@ -185,15 +206,20 @@
     const apiUrlInput = document.getElementById("apiUrl");
     const apiKeyInput = document.getElementById("apiKey");
     const modelInput = document.getElementById("model");
+    const conversationIdInput = document.getElementById("conversationId");
     const promptInput = document.getElementById("prompt");
     const askBtn = document.getElementById("askBtn");
+    const newConversationBtn = document.getElementById("newConversationBtn");
     const statusEl = document.getElementById("status");
     const answerEl = document.getElementById("answer");
 
     const defaultApiUrl = window.location.origin;
+    const createConversationId = () => (window.crypto?.randomUUID ? window.crypto.randomUUID() : `conv-${Date.now()}-${Math.random().toString(16).slice(2)}`);
     apiUrlInput.value = localStorage.getItem("ollama_proxy_api_url") || defaultApiUrl;
     apiKeyInput.value = localStorage.getItem("ollama_proxy_api_key") || "";
     modelInput.value = localStorage.getItem("ollama_proxy_model") || "";
+    conversationIdInput.value = localStorage.getItem("ollama_proxy_conversation_id") || createConversationId();
+    localStorage.setItem("ollama_proxy_conversation_id", conversationIdInput.value);
 
     function setStatus(text, cssClass = "") {
       statusEl.textContent = text;
@@ -216,6 +242,7 @@
       const key = apiKeyInput.value.trim();
       const prompt = promptInput.value.trim();
       const model = (modelInput.value || "").trim();
+      const conversationId = (conversationIdInput.value || "").trim();
 
       if (!apiUrl) {
         setStatus("Debes ingresar API URL.", "warn");
@@ -230,9 +257,15 @@
         return;
       }
 
+      if (!conversationId) {
+        setStatus("Debes ingresar o generar un Conversation ID.", "warn");
+        return;
+      }
+
       localStorage.setItem("ollama_proxy_api_url", apiUrl);
       localStorage.setItem("ollama_proxy_api_key", key);
       localStorage.setItem("ollama_proxy_model", model);
+      localStorage.setItem("ollama_proxy_conversation_id", conversationId);
 
       askBtn.disabled = true;
       setStatus("Consultando Ollama...");
@@ -241,6 +274,8 @@
       try {
         const body = {
           prompt,
+          conversation_id: conversationId,
+          remember: true,
           stream: false,
         };
         if (model) {
@@ -262,13 +297,22 @@
         }
 
         answerEl.textContent = getMessageFromApi(data);
-        setStatus("Respuesta recibida.");
+        setStatus(`Respuesta recibida. Conversación: ${data.conversation_id || conversationId}`);
       } catch (error) {
         answerEl.textContent = String(error.message || error);
         setStatus("Error consultando la API.", "error");
       } finally {
         askBtn.disabled = false;
       }
+    });
+
+    newConversationBtn.addEventListener("click", async () => {
+      const newConversationId = createConversationId();
+      conversationIdInput.value = newConversationId;
+      localStorage.setItem("ollama_proxy_conversation_id", newConversationId);
+      promptInput.value = "";
+      answerEl.textContent = "Conversación reiniciada. Puedes hacer una nueva pregunta.";
+      setStatus("Nueva conversación creada.");
     });
   </script>
 </body>
