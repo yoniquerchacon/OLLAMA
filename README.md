@@ -29,7 +29,7 @@ Ajusta:
 - `OLLAMA_BASE_URL`: URL de Ollama
   - Local: `http://127.0.0.1:11434`
   - Remoto/Vercel: usa una URL pública de túnel hacia tu máquina
-- `DEFAULT_MODEL`: por ejemplo `llama3`
+- `DEFAULT_MODEL`: por ejemplo `llama3:8b`
 - `REQUEST_TIMEOUT`: segundos de espera
 - `API_KEY`: clave secreta requerida para consumir `POST /chat`
 
@@ -51,7 +51,7 @@ Body de ejemplo:
 
 ```json
 {
-  "model": "llama3",
+  "model": "llama3:8b",
   "prompt": "Hola, ¿quién eres?",
   "stream": false
 }
