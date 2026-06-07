@@ -53,6 +53,29 @@ Body de ejemplo:
 }
 ```
 
+## 4.1) Endpoint con adjuntos
+
+`POST /chat/attachments` (multipart/form-data)
+
+Campos:
+
+- `prompt`: texto del usuario
+- `model`: nombre del modelo
+- `conversation_id`: opcional
+- `messages_json`: historial previo en formato JSON (opcional)
+- `files`: multiples archivos
+
+Soporta archivos:
+
+- Imagenes: png, jpg/jpeg, webp
+- Documentos: txt, md, json, csv, pdf, docx
+
+Limites base:
+
+- maximo 8 archivos por mensaje
+- maximo 8MB por archivo
+- maximo 24MB por solicitud
+
 ## 5) Interfaz web
 
 La interfaz esta en `front end/index.html`.
@@ -75,6 +98,17 @@ Importante:
 - Esto funciona bien en Vercel porque no depende del disco del servidor
 - Si quieres memoria compartida entre dispositivos o usuarios logueados, entonces sí conviene añadir una base de datos externa como Vercel KV, Postgres, Redis o Supabase
 - La implementación actual separa cada conversación por navegador, que es la forma más simple y estable sin infraestructura adicional
+
+## 7) Seguridad contra prompt injection
+
+El backend aplica defensas basicas:
+
+- Detecta patrones peligrosos como "ignore previous instructions" y variantes
+- Rechaza prompts sospechosos con error `400`
+- Trata los adjuntos como entrada no confiable
+- Agrega un mensaje de sistema con reglas de seguridad antes de consultar Ollama
+
+Nota: esta defensa reduce riesgo, pero no reemplaza controles avanzados. Para mayor seguridad, conviene añadir validacion adicional por reglas del negocio y moderacion de contenido.
 
 ## Nota importante sobre Vercel
 
