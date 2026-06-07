@@ -5,6 +5,7 @@
     { "src": "front end/index.html", "use": "@vercel/static" }
   ],
   "routes": [
+    { "src": "/models", "dest": "backend/app/main.py" },
     { "src": "/chat", "dest": "backend/app/main.py" },
     { "src": "/health", "dest": "backend/app/main.py" },
     { "src": "/docs", "dest": "backend/app/main.py" },
